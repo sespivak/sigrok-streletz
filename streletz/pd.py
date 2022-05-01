@@ -33,6 +33,15 @@ class Ann:
 RX = 0
 TX = 1
 
+PACKETSIZE_MAX = 64
+PACKETSIZE_MIN = 4
+
+
+class BufPos:
+    HEADER = 1
+    DATA_SIZE = 2
+    DATA_START = 3
+
 
 def byte_to_hex(byte):
     return '{:02X}'.format(byte)
@@ -84,10 +93,10 @@ class Decoder(srd.Decoder):
         self.msg_complete = None
         self.failed = None
         self.checksum = 0
-        self.accum_bytes = deque(maxlen=70)
+        self.accum_bytes = deque(maxlen=PACKETSIZE_MAX)
         self.reset()
         self.rxtx = 0
-        self.packet_size = 0
+        self.packet_size = None
         self.packet_ss = None
         self.packet_es = None
         self.data_ss = None
@@ -102,7 +111,7 @@ class Decoder(srd.Decoder):
         self.checksum = 0
         self.accum_bytes.clear()
         self.rxtx = 0
-        self.packet_size = 0
+        self.packet_size = None
         self.packet_ss = None
         self.packet_es = None
         self.data_ss = None
@@ -124,9 +133,9 @@ class Decoder(srd.Decoder):
                 self.reset()
 
         # wait header
-        if self.buf_pos <= 0:
+        if self.buf_pos < BufPos.HEADER:
             if byte == self.header[rxtx]:
-                self.buf_pos = 1
+                self.buf_pos = BufPos.HEADER
                 self.rxtx = rxtx
                 self.accum_bytes.append(byte)
                 self.packet_ss = ss
@@ -135,17 +144,18 @@ class Decoder(srd.Decoder):
                                                 'HEAD', 'H']])
 
         else:
-            if self.buf_pos == 2:
+            if self.buf_pos == BufPos.DATA_SIZE:
                 # data size
-                self.packet_size = 4 + byte
+                self.packet_size = PACKETSIZE_MIN + byte
                 if self.packet_size > self.accum_bytes.maxlen:
                     self.putg(ss, es, [Ann.WARN, ['Wrong DS: 0x' + byte_to_hex(byte),
                                                   'WDS']])
                     self.reset()
+                    return
                 else:
                     self.putg(ss, es, [Ann.DATASIZE, ['DS: 0x' + byte_to_hex(byte),
                                                       'DS']])
-            elif self.buf_pos == 3:
+            elif self.buf_pos == BufPos.DATA_START:
                 # start of data
                 self.data_ss = ss
 
@@ -168,10 +178,11 @@ class Decoder(srd.Decoder):
                     rxtx_str = 'TX' if rxtx == TX else 'RX'
                     packet_ann = Ann.PACKET_TX if rxtx == TX else Ann.PACKET_RX
                     self.putg(self.packet_ss, self.packet_es,
-                              [packet_ann, ['PACKET {}: {}'.format(rxtx_str, packet_str),
-                                            'PACKET ' + rxtx_str,
-                                            'P' + rxtx_str]])
+                              [packet_ann, ['{} PACKET: {}'.format(rxtx_str, packet_str),
+                                            rxtx_str + ' PACKET',
+                                            rxtx_str + 'P']])
                 self.reset()
+                return
 
     def decode(self, ss, es, data):
         # Analyze DATA bits only
