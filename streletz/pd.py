@@ -27,7 +27,9 @@ import sigrokdecode as srd
 
 
 class Ann:
-    HEADER, DATASIZE, DATA_RX, DATA_TX, CHECKSUM, PACKET_RX, PACKET_TX, WARN = range(8)
+    HEADER, DATASIZE, CHECKSUM, \
+    ANSWER, COMMAND, DATA_RX, DATA_TX,  \
+    PACKET_RX, PACKET_TX, WARN = range(10)
 
 
 RX = 0
@@ -40,7 +42,8 @@ PACKETSIZE_MIN = 4
 class BufPos:
     HEADER = 1
     DATA_SIZE = 2
-    DATA_START = 3
+    DATA_TYPE = 3
+    DATA_START = 4
 
 
 def byte_to_hex(byte):
@@ -73,16 +76,18 @@ class Decoder(srd.Decoder):
     annotations = (
         ('head', 'Header'),
         ('datasize', 'Data Size'),
+        ('checksum', 'Checksum'),
+        ('answer', 'Answer'),
+        ('command', 'Command'),
         ('rx-data', 'RX Data'),
         ('tx-data', 'TX Data'),
-        ('checksum', 'Checksum'),
         ('rx-packet', 'RX packet'),
         ('tx-packet', 'TX packet'),
         ('warning', 'Warning'),
     )
     annotation_rows = (
         ('framing', 'Framing', (Ann.HEADER, Ann.DATASIZE, Ann.CHECKSUM)),
-        ('data', 'Data', (Ann.DATA_RX, Ann.DATA_TX,)),
+        ('data', 'Data', (Ann.ANSWER, Ann.COMMAND, Ann.DATA_RX, Ann.DATA_TX,)),
         ('warnings', 'Warnings', (Ann.WARN,)),
         ('packets', 'Packets', (Ann.PACKET_RX, Ann.PACKET_TX)),
     )
@@ -155,18 +160,25 @@ class Decoder(srd.Decoder):
                 else:
                     self.putg(ss, es, [Ann.DATASIZE, ['DS: 0x' + byte_to_hex(byte),
                                                       'DS']])
+            elif self.buf_pos == BufPos.DATA_TYPE:
+                # data type - command or answer
+                if rxtx == TX:
+                    self.putg(ss, es, [Ann.COMMAND, ['CMD: 0x' + byte_to_hex(byte), 'CMD']])
+                else:
+                    self.putg(ss, es, [Ann.ANSWER, ['ANS: 0x' + byte_to_hex(byte), 'ANS']])
+
             elif self.buf_pos == BufPos.DATA_START:
                 # start of data
                 self.data_ss = ss
 
-            if self.buf_pos == self.packet_size - 1:
+            if self.packet_size > PACKETSIZE_MIN and self.buf_pos == self.packet_size - 1:
                 # End of data block
-                data_str = bytes_to_hex(islice(self.accum_bytes, 2, self.packet_size - 1))
+                data_str = bytes_to_hex(islice(self.accum_bytes, BufPos.DATA_START-1, self.packet_size-1))
                 rxtx_str = 'TX' if rxtx == TX else 'RX'
                 self.putg(self.data_ss, es, [Ann.DATA_TX if rxtx == TX else Ann.DATA_RX,
                                              [rxtx_str + ' DATA: ' + data_str,
-                                                 rxtx_str + 'DATA',
-                                                 rxtx_str + 'D', 'D']])
+                                              rxtx_str + 'DATA',
+                                              rxtx_str + 'D', 'D']])
 
             elif self.buf_pos == self.packet_size:
                 # Checksum bytes: end of packet
