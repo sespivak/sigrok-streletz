@@ -1,0 +1,7 @@
+Protocol decoder for Streletz Guard system on top of UART sigrok decoder.
+
+UART communication typically runs at 57.6kbps with 8n1 frame format.
+Streletz messages starts with header followed by datasize byte.
+At the end of packet checksum byte transmitted.
+Xor operation on whole packet must be equal to 0.
+Maximum packet length is 64 bytes.

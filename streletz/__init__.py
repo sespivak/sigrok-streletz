@@ -22,7 +22,7 @@
 ## SOFTWARE.
 
 '''
-Protocol decoder for Streletz Guard system on top of UART.
+Protocol decoder for Streletz Guard system on top of UART sigrok decoder.
 
 UART communication typically runs at 57.6kbps with 8n1 frame format.
 
