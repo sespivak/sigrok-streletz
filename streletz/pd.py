@@ -110,6 +110,7 @@ class Decoder(srd.Decoder):
         self.packet_ss = None
         self.packet_es = None
         self.data_ss = None
+        self.data_es = None
         self.buf_pos = 0
         self.header = [None, None]
         self.print_sec = 0
@@ -127,6 +128,7 @@ class Decoder(srd.Decoder):
         self.packet_ss = None
         self.packet_es = None
         self.data_ss = None
+        self.data_es = None
         self.buf_pos = 0
 
     def putg(self, ss, es, data):
@@ -180,28 +182,38 @@ class Decoder(srd.Decoder):
                 # start of data
                 self.data_ss = ss
 
-            if self.packet_size > PACKETSIZE_MIN and self.buf_pos == self.packet_size - 1:
+            if self.buf_pos == self.packet_size - 1:
                 # End of data block
-                data_str = bytes_to_hex(islice(self.accum_bytes, BufPos.DATA_START-1, self.packet_size-1))
-                rxtx_str = 'TX' if rxtx == TX else 'RX'
-                self.putg(self.data_ss, es, [Ann.DATA_TX if rxtx == TX else Ann.DATA_RX,
-                                             [rxtx_str + ' DATA: ' + data_str,
-                                              rxtx_str + 'DATA',
-                                              rxtx_str + 'D', 'D']])
+                self.data_es = es
 
-            elif self.buf_pos == self.packet_size:
+            if self.buf_pos == self.packet_size:
                 # Checksum bytes: end of packet
-                self.putg(ss, es, [Ann.CHECKSUM, ['CS: 0x' + byte_to_hex(byte), 'CS']])
+                cs_str = 'CS: 0x' + byte_to_hex(byte)
+                rxtx_str = 'TX' if rxtx == TX else 'RX'
+                packet_str = bytes_to_hex(self.accum_bytes)
                 self.packet_es = es
                 if self.checksum == 0:
                     # Correct checksum received
-                    packet_str = bytes_to_hex(self.accum_bytes)
-                    rxtx_str = 'TX' if rxtx == TX else 'RX'
+                    self.putg(ss, es, [Ann.CHECKSUM, ['CS: 0x' + byte_to_hex(byte), 'CS']])
                     packet_ann = Ann.PACKET_TX if rxtx == TX else Ann.PACKET_RX
                     self.putg(self.packet_ss, self.packet_es,
                               [packet_ann, ['{} PACKET: {}'.format(rxtx_str, packet_str),
                                             rxtx_str + ' PACKET',
                                             rxtx_str + 'P']])
+                    if self.packet_size > PACKETSIZE_MIN:
+                        data_str = bytes_to_hex(islice(self.accum_bytes, BufPos.DATA_START-1, self.packet_size-1))
+                        self.putg(self.data_ss, self.data_es,
+                                  [Ann.DATA_TX if rxtx == TX else Ann.DATA_RX, [
+                                      rxtx_str + ' DATA: ' + data_str,
+                                      rxtx_str + 'DATA',
+                                      rxtx_str + 'D', 'D']])
+                else:
+                    # Wrong checksum received
+                    self.putg(self.packet_ss, self.packet_es,
+                              [Ann.WARN, ['Err {} PACKET: {}'.format(rxtx_str, packet_str),
+                                          'Err ' + rxtx_str + ' PACKET',
+                                          rxtx_str + 'P', 'EP']])
+
                 self.reset()
                 return
 
