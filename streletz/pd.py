@@ -65,10 +65,6 @@ class Decoder(srd.Decoder):
     inputs = ['uart']
     outputs = ['streletz']
     tags = ['Embedded/industrial']
-    optional_channels = (
-        {'id': 'tx', 'name': 'TX', 'desc': 'Requests'},
-        {'id': 'rx', 'name': 'RX', 'desc': 'Responses'},
-    )
     options = (
         {'id': 'header_tx', 'desc': 'Request header', 'default': 217},
         {'id': 'header_rx', 'desc': 'Response header', 'default': 157},
@@ -101,7 +97,6 @@ class Decoder(srd.Decoder):
         self.failed = None
         self.checksum = 0
         self.accum_bytes = deque(maxlen=PACKETSIZE_MAX)
-        self.reset()
         self.rxtx = 0
         self.packet_size = None
         self.packet_ss = None
@@ -111,12 +106,13 @@ class Decoder(srd.Decoder):
         self.buf_pos = 0
         self.header = [None, None]
         self.print_sec = 0
-        self.sampleperiod = None
+        self.sampletime = None
+        self.reset()
 
     def metadata(self, key, value):
         if key == srd.SRD_CONF_SAMPLERATE:
             self.samplerate = value
-            self.sampleperiod = 1.0 / self.samplerate
+            self.sampletime = 1.0 / self.samplerate
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
@@ -136,8 +132,8 @@ class Decoder(srd.Decoder):
 
     def putg(self, ss, es, data):
         """Put a graphical annotation."""
-        if self.print_sec and self.sampleperiod:
-            data[1][0] = "{:8.3f} ".format(ss * self.sampleperiod) + data[1][0]
+        if self.print_sec and self.sampletime:
+            data[1][0] = "{:8.3f} ".format(ss * self.sampletime) + data[1][0]
         self.put(ss, es, self.out_ann, data)
 
     def handle_byte(self, ss, es, byte, rxtx):
