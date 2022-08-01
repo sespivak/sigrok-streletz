@@ -219,6 +219,6 @@ class Decoder(srd.Decoder):
     def decode(self, ss, es, data):
         # Analyze DATA bits only
         ptype, rxtx, pdata = data
-        if ptype == 'DATA':
-            byte, _ = pdata
-            self.handle_byte(ss, es, byte, rxtx)
+        if ptype == 'FRAME':
+            data_value, frame_valid = pdata
+            self.handle_byte(ss, es, data_value, rxtx)
