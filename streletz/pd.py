@@ -68,7 +68,6 @@ class Decoder(srd.Decoder):
     options = (
         {'id': 'header_tx', 'desc': 'Request header', 'default': 217},
         {'id': 'header_rx', 'desc': 'Response header', 'default': 157},
-        {'id': 'print_sec', 'desc': 'Print start time (sec) in annotations', 'default': False, 'values': (True, False)},
     )
     annotations = (
         ('head', 'Header'),
@@ -90,7 +89,6 @@ class Decoder(srd.Decoder):
     )
 
     def __init__(self):
-        self.samplerate = None
         self.out_py = None
         self.out_ann = None
         self.msg_complete = None
@@ -105,19 +103,11 @@ class Decoder(srd.Decoder):
         self.data_es = None
         self.buf_pos = 0
         self.header = [None, None]
-        self.print_sec = 0
-        self.sampletime = None
         self.reset()
-
-    def metadata(self, key, value):
-        if key == srd.SRD_CONF_SAMPLERATE:
-            self.samplerate = value
-            self.sampletime = 1.0 / self.samplerate
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
         self.header = self.options['header_rx'], self.options['header_tx']
-        self.print_sec = self.options['print_sec']
 
     def reset(self):
         self.checksum = 0
@@ -132,8 +122,6 @@ class Decoder(srd.Decoder):
 
     def putg(self, ss, es, data):
         """Put a graphical annotation."""
-        if self.print_sec and self.sampletime:
-            data[1][0] = "{:8.3f} ".format(ss * self.sampletime) + data[1][0]
         self.put(ss, es, self.out_ann, data)
 
     def handle_byte(self, ss, es, byte, rxtx):
